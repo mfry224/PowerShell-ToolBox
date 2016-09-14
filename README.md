@@ -10,9 +10,6 @@ Required Software:
 	OR
 		“Active Directory Management Gateway Service” on 2003 or 2008 server http://www.microsoft.com/download/en/details.aspx?displaylang=en&id=2852]
 	
-GitHub
-	https://github.com/mfry224/
-	
 Tips:
 - For best results this script should be run with elevated priveleges
 - Add your IPs to the empty arrays before use or use a specific target without any changes to the arrays.
