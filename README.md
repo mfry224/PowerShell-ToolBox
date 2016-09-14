@@ -16,3 +16,10 @@ Tips:
 - If you select a program to uninstall it will be removed without final confirmation from user. This will change soon*
 - DNS duplicate record finding tool requires final confirmation until I can work out the PowerShell string comparison logic.
 	- BE SURE to review the results as false positives may occur i.e. 192.168.0.182 will trigger false positive for 192.168.0.18 as well.
+
+
+## Change Log
+#### 9/14/2016
+- Created new repository.
+- Added support for IP ranges to be used in target selection.
+- Program un-installer has been disabled due to Win32_product class issues.
