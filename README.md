@@ -15,4 +15,4 @@ Tips:
 - Add your IPs to the empty arrays before use or use a specific target without any changes to the arrays.
 - If you select a program to uninstall it will be removed without final confirmation from user. This will change soon*
 - DNS duplicate record finding tool requires final confirmation until I can work out the PowerShell string comparison logic.
-- BE SURE to review the results as false positives may occur i.e. 192.168.0.182 will trigger false positive for 192.168.0.18 as well.
+	- BE SURE to review the results as false positives may occur i.e. 192.168.0.182 will trigger false positive for 192.168.0.18 as well.
