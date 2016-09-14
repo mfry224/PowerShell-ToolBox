@@ -5,10 +5,10 @@ Required Software:
 PowerShell v3 or higher
 
 AND
-Remote Server Administration Tools” on Win 10 https://www.microsoft.com/en-us/download/details.aspx?id=45520
+Remote Server Administration Tools on Win 10 https://www.microsoft.com/en-us/download/details.aspx?id=45520
 
 OR
- Remote Server Administration Tools” on Win 7 http://www.microsoft.com/download/en/details.aspx?id=7887
+ Remote Server Administration Tools on Win 7 http://www.microsoft.com/download/en/details.aspx?id=7887
 	
 Tips:
 - For best results this script should be run with elevated priveleges
