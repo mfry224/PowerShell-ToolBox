@@ -32,20 +32,6 @@ $host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Loading...";
 $KTFCU_dcname = "";
 $KTFCU_domainLocal = "";
 
-<# You may name your locations in the strings #>
-$KTFCU_siteA = "&Main Office";
-<# And edit your location IPs in the arays #>
-$KTFCU_locArray1 = @(
-	
-);
-
-<# This is an extra set in case you need more than one location array #>
-<# Either use both the name and array or neither to avoid confusion #>
-$KTFCU_siteB = "&Satelites";
-$KTFCU_locArray2 = @(
-	
-);
-
 function KTFCU_fnc_privCheck ()
 {
 	$userObject = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent());
@@ -87,16 +73,32 @@ function KTFCU_fnc_privCheck ()
 function KTFCU_fnc_setPath ()
 {
 	$newPath = $null
-	if([IntPtr]::size * 8 -eq 64) {
+	if ([IntPtr]::size * 8 -eq 64) {
 		$host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Windows PowerShell (x64)";
 		$newPath = "${env:programfiles(x86)}\Utilities";
 	} else {
 		$host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Windows PowerShell (x86)";
 		$newPath = "${env:programfiles}\Utilities";
 	};
-	if((Test-Path $newPath) -and !($env:path -match $newPath.Replace("\","\\")) ) {
+	if ((Test-Path $newPath) -and !($env:path -match $newPath.Replace("\","\\")) ) {
 		$env:path = "$utilities;${env:path}";
 	};
+};
+
+function KTFCU_fnc_ipRange
+{
+	write-host "For a range of targets use the format xxx.xxx.xxx.xxx-xxx`n";
+    $ipPrompt = read-host "Enter the range of IPs to use";
+	
+    $octSplit = $ipPrompt.Split(".");
+    $ipSplit = $ipPrompt.Split("-");
+    $finalOct = $octSplit[3].Split("-");
+	
+    $ipNet = $octSplit[0]+"."+$octSplit[1]+"."+$octSplit[2];
+
+    $ipRange = $finalOct[0]..$ipSplit[1] | % {"$ipNet.$_"};
+
+    return $ipRange
 };
 
 function KTFCU_fnc_hostFind ()
@@ -108,78 +110,23 @@ function KTFCU_fnc_hostFind ()
 	$targetHost = "";
 	
 	$msgPrompt = "`n";
-	$locPrompt = "Please select the location(s) to include";
+	$locPrompt = "Please select the target(s) to include";
 
 	$locOption = new-object collections.objectmodel.collection[management.automation.host.choicedescription];
 
-	if (($KTFCU_siteA -eq "") -and (@($KTFCU_locArray1).length -eq 0)) {
-		
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&All Locations"));
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Target Host"));
-		
-		$ktfcu_locSelect = $host.ui.promptforchoice($locPrompt, $msgPrompt, $locOption, 1)
-		write-host "`n";
-		
-		<# User chose site all locations array #>
-		if ($ktfcu_locSelect -eq 0) {
-			$testHosts = $KTFCU_locArray1 + $KTFCU_locArray2;
-		};
-		<# User chose a sinlge host #>
-		if ($ktfcu_locSelect -eq 1) {
-			$targetHost = read-host -prompt "Please enter the IP address of the host machine";
-			$testHosts = [string]$targetHost;
-		};
+	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Range of IPs"));
+	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Single IP"));
+
+	$ktfcu_locSelect = $host.ui.promptforchoice($locPrompt, $msgPrompt, $locOption, 1)
+	write-host "`n";
+
+	if ($ktfcu_locSelect -eq 0) {
+		$testHosts = &KTFCU_fnc_ipRange;
+	};
 	
-	} ElseIf ((@($KTFCU_locArray1).length -gt 0) -and (@($KTFCU_locArray2).length -eq 0)) {
-	
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist $KTFCU_siteA));
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&All Locations"));
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Target Host"));
-		
-		$ktfcu_locSelect = $host.ui.promptforchoice($locPrompt, $msgPrompt, $locOption, 2)
-		write-host "`n";
-		
-		<# User chose site A array #>
-		if ($ktfcu_locSelect -eq 0) {
-			$testHosts = $KTFCU_locArray1;
-		};
-		<# User chose site all locations array #>
-		if ($ktfcu_locSelect -eq 1) {
-			$testHosts = $KTFCU_locArray1 + $KTFCU_locArray2;
-		};
-		<# User chose a sinlge host #>
-		if ($ktfcu_locSelect -eq 2) {
-			$targetHost = read-host -prompt "Please enter the IP address of the host machine";
-			$testHosts = [string]$targetHost;
-		};
-	
-	} ElseIf ((@($KTFCU_locArray1).length -gt 0) -and (@($KTFCU_locArray2).length -gt 0)) {
-	
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist $KTFCU_siteB));
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist $KTFCU_siteA));
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&All Locations"));
-		$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Target Host"));
-		
-		$ktfcu_locSelect = $host.ui.promptforchoice($locPrompt, $msgPrompt, $locOption, 3)
-		write-host "`n";
-		
-		<# User chose site A array #>
-		if ($ktfcu_locSelect -eq 0) {
-			$testHosts = $KTFCU_locArray1;
-		};
-		<# User chose site B array #>
-		if ($ktfcu_locSelect -eq 1) {
-			$testHosts = $KTFCU_locArray2;
-		};
-		<# User chose site all locations array #>
-		if ($ktfcu_locSelect -eq 2) {
-			$testHosts = $KTFCU_locArray1 + $KTFCU_locArray2;
-		};
-		<# User chose a sinlge host #>
-		if ($ktfcu_locSelect -eq 3) {
-			$targetHost = read-host -prompt "Please enter the IP address of the host machine";
-			$testHosts = [string]$targetHost;
-		};
+	if ($ktfcu_locSelect -eq 1) {
+		$targetHost = read-host -prompt "Please enter the IP address of the host machine";
+		$testHosts = [string]$targetHost;
 	};
 
 	write-host "Attempting to contact the selected machines. Please wait...`n"
@@ -193,7 +140,6 @@ function KTFCU_fnc_hostFind ()
 		} else {
 			write-host "Host $i is Unreachable!" -foreground "Red `n";
 		};
-		write-host "`n";
 	};
 	
 	return $isAlive
