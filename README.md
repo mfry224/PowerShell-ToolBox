@@ -22,6 +22,7 @@ Tips:
 - Added blacklisting by IP support.
 - Lowered strict mode to version 2 for compatiblity with Windows 7.
 - Roaming profile cleaner is still being refined to ensure issues with the character limit do not break folder deletion.
+
 #### 9/14/2016
 - Created new repository.
 - Added support for IP ranges to be used in target selection.
