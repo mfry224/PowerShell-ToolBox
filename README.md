@@ -2,7 +2,7 @@
 A collection of tools and functions to assist in everyday network administration.
 
 Required Software:
-PowerShell v3 or higher
+PowerShell v2 or higher
 
 AND
 Remote Server Administration Tools on Win 10 https://www.microsoft.com/en-us/download/details.aspx?id=45520
