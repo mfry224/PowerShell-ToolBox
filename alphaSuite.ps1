@@ -4,33 +4,30 @@
 	This script was created with the help of various scripting communities and would not be possible without them
 	
 	Required Software:
-		PowerShell v3 or higher
+		PowerShell v2 or higher
 	AND
 		“Remote Server Administration Tools” on Win 10 https://www.microsoft.com/en-us/download/details.aspx?id=45520
 	OR
 		“Remote Server Administration Tools” on Win 7 http://www.microsoft.com/download/en/details.aspx?id=7887
-	OR
-		“Active Directory Management Gateway Service” on 2003 or 2008 server http://www.microsoft.com/download/en/details.aspx?displaylang=en&id=2852]
 	
 	GitHub
 	https://github.com/mfry224/
 	
 	Tips:
 	- For best results this script should be run with elevated priveleges
-	- Add your IPs to the empty arrays before use or use a specific target without any changes to the arrays.
-	- If you select a program to uninstall it will be removed without final confirmation from user. This will change soon*
 	- DNS duplicate record finding tool requires final confirmation until I can work out the PowerShell string comparison logic.
 		- BE SURE to review the results as false positives may occur i.e. 192.168.0.182 will trigger false positive for 192.168.0.18 as well.
 	
 	TODO:
 	- Alot :P
-	- Base the host lookup on AD computers/Servers and distinguish for users to select
 #>
 $host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Loading...";
 
 <# These are required for DNS Record maintenance only #>
 $KTFCU_dcname = "";
 $KTFCU_domainLocal = "";
+
+$KTFCU_blackList = @();
 
 function KTFCU_fnc_privCheck ()
 {
@@ -46,7 +43,7 @@ function KTFCU_fnc_privCheck ()
 		
 		write-host "PS-Suite: Checking remote management settings. Please wait...`n";
 		Enable-PSRemoting -force
-		Set-StrictMode -Version 3
+		Set-StrictMode -Version 2
 		write-host "";
 		
 		sleep 3;
@@ -62,7 +59,7 @@ function KTFCU_fnc_privCheck ()
 		
 		write-host "PS-Suite: Checking remote management settings. Please wait...`n";
 		Enable-PSRemoting -force
-		Set-StrictMode -Version 3
+		Set-StrictMode -Version 2
 		
 		sleep 3;
 		
@@ -101,6 +98,29 @@ function KTFCU_fnc_ipRange
     return $ipRange
 };
 
+function KTFCU_fnc_adComputers
+{
+	param (
+		[Parameter(Mandatory=$true)][array]$type
+	);
+	$servers = @();
+	$pcs = @();
+    if ($type -eq 'servers') {
+		$srvStrs = Get-ADComputer -Filter {OperatingSystem -Like '*Server*'} -Property ipv4address | Select -expand ipv4address
+		forEach ($srvStr in $srvStrs) {
+			if ($srvStr -gt '') {$servers = $servers += $srvStr};
+		};
+		return $servers
+	};
+    if ($type -eq 'pcs') {
+		$pcsStrs = Get-ADComputer -Filter {OperatingSystem -NotLike '*Server*'} -Property ipv4address | Select -expand ipv4address
+		forEach ($pcsStr in $pcsStrs) {
+			if ($pcsStr -gt '') {$pcs = $pcs += $pcsStr};
+		};
+		return $pcs
+	};
+};
+
 function KTFCU_fnc_hostFind ()
 {
 	&KTFCU_fnc_header;
@@ -114,34 +134,41 @@ function KTFCU_fnc_hostFind ()
 
 	$locOption = new-object collections.objectmodel.collection[management.automation.host.choicedescription];
 
+	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Workstations"));
+	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Servers"));
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Range of IPs"));
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Single IP"));
 
-	$ktfcu_locSelect = $host.ui.promptforchoice($locPrompt, $msgPrompt, $locOption, 1)
+	$ktfcu_locSelect = $host.ui.promptforchoice($locPrompt, $msgPrompt, $locOption, 3)
 	write-host "`n";
 
-	if ($ktfcu_locSelect -eq 0) {
-		$testHosts = &KTFCU_fnc_ipRange;
-	};
-	
-	if ($ktfcu_locSelect -eq 1) {
-		$targetHost = read-host -prompt "Please enter the IP address of the host machine";
-		$testHosts = [string]$targetHost;
+	switch ($ktfcu_locSelect) {
+		0 {$testHosts = &KTFCU_fnc_adComputers -type 'pcs'};
+		1 {$testHosts = &KTFCU_fnc_adComputers -type 'servers'};
+		2 {$testHosts = &KTFCU_fnc_ipRange;};
+		3 {
+			$targetHost = read-host -prompt "Please enter the IP address of the host machine";
+			$testHosts = [string]$targetHost;
+		};
 	};
 
 	write-host "Attempting to contact the selected machines. Please wait...`n"
 	
 	forEach ($i in $testHosts)
 	{
-		$checkState = test-connection $i -count 2 -quiet;
-		if ($checkState) {
-			$isAlive = [array]$isAlive += $i;
-			write-host "Host $i is Online!" -foreground "Green `n";
+		if (!($KTFCU_blackList -contains $i)) {
+			$checkState = test-connection $i -count 2 -quiet;
+			if ($checkState) {
+				$isAlive = [array]$isAlive += $i;
+				write-host "Host $i is Online!" -foreground "Green";
+			} else {
+				write-host "Host $i is Unreachable!" -foreground "Red";
+			};
 		} else {
-			write-host "Host $i is Unreachable!" -foreground "Red `n";
+			write-host "Host $i is blacklisted!" -foreground "Yellow";
 		};
 	};
-	
+	write-host "`n";
 	return $isAlive
 };
 
@@ -660,20 +687,20 @@ function KTFCU_fnc_toolsMain
 							$delArrays = @();
 
                             if (($findPaths).count -lt 2) {
-                                $findFiles = Get-ChildItem -Path $findPaths | Where {$_.Name -match $userFiles};
-                                remove-item -path $findPaths"\"$userFiles -verbose;
+								forEach ($userFile in $userFiles) {
+									$findFiles = Get-ChildItem -Path $findPaths -verbose | Where {$_.Name -match $userFiles};
+									remove-item -whatif -path $findPaths"\"$userFiles -verbose;
+								};
                             } else {
 							    forEach ($findPath in $findPaths) {
-								
 								    forEach ($userFile in $userFiles) {
-									    $findFiles = Get-ChildItem -Path $findPath | Where {$_.Name -match $userFile}
+									    $findFiles = Get-ChildItem -Path $findPath -verbose | Where {$_.Name -match $userFile}
 									    write-host "`n";
 									    $delArrays = $delArrays += $findFiles;
                                         write-host "`n";
 								    };
-
 								    forEach ($delArray in $delArrays) {
-									    remove-item -path $findPath"\"$delArray -verbose -ErrorAction SilentlyContinue;
+									    remove-item -whatif -path $findPath"\"$delArray -verbose <# -ErrorAction SilentlyContinue #>;
 								    };
 							    };
                             };
