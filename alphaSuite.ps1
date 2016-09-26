@@ -137,7 +137,7 @@ function KTFCU_fnc_hostFind ()
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Workstations"));
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Servers"));
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Range of IPs"));
-	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Single IP"));
+	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "Single &IP"));
 
 	$ktfcu_locSelect = $host.ui.promptforchoice($locPrompt, $msgPrompt, $locOption, 3)
 	write-host "`n";
