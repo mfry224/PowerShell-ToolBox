@@ -17,6 +17,9 @@ Tips:
 
 
 ## Change Log
+#### 9/26/2016
+- Fixed typo that caused host selection to work improperly when selecting servers.
+
 #### 9/16/2016
 - Added support for Active Directory based host lookup.
 - Added blacklisting by IP support.
