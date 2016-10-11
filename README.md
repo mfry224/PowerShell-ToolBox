@@ -17,6 +17,12 @@ Tips:
 
 
 ## Change Log
+#### 10/11/2016
+- Profile cleaner is now more reliable by utilizing the win32_profile class to remove profiles via SID.
+- Residual profile folders are cleaned up with a second sweep after profiles are removed via SID.
+- Profile entries are removed from the regisrty as well.
+- There are protected profiles in an array in the top of the script. Please use this to avoid incorrect profile removal.
+
 #### 9/26/2016
 - Fixed typo that caused host selection to work improperly when selecting servers.
 
