@@ -1,5 +1,5 @@
 <#
-	PowerShell Suite alpha
+	PowerShell Suite beta
 	Suit of tools for administrative network environment usage... or at home ;]
 	This script was created with the help of various scripting communities and would not be possible without them
 
@@ -14,74 +14,87 @@
 	https://github.com/mfry224/
 
 	Tips:
-	- For best results this script should be run with elevated priveleges
+	- For best results this script should be run with elevated privileges
 	- DNS duplicate record finding tool requires final confirmation until I can work out the PowerShell string comparison logic.
 		- BE SURE to review the results as false positives may occur i.e. 192.168.0.182 will trigger false positive for 192.168.0.18 as well.
 
 	TODO:
 	- Alot :P
 #>
-$host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Loading...";
+$host.UI.RawUI.WindowTitle = "KTFCU BetaBox | Initializing...";
 
-<# These are required for DNS Record maintenance only but why not enter them anyway :/ #>
-$KTFCU_dcname = "";
-$KTFCU_domainLocal = "";
+<# Array of available domain controllers. Fine to have only one. #>
+$KTFCU_myDCs = @("");
 
-<# These profiles need to be protected from deletion #>
-$protAccts = @("administrator","NETWORK SERVICE","LOCAL SERVICE","SYSTEM","$domainName","$finalUser");
+<# Domain name i.e. domain.local #>
+$KTFCU_domName = "";
 
-<# List all IPs here that you want to be left out of this tool #>
-$KTFCU_blackList = @("","","");
+<# Array of IPs to be omitted from any operations. #>
+$KTFCU_blackList = @();
 
-<# You may add a custom array of IPs within this array #>
-$KTFCU_locationA = @(
+<# Array of specific IPs to be used in host selection options. You may use this array to target a specific group of IPs.#>
+$KTFCU_satellites = @(
 	"","",""
 );
 
-function KTFCU_fnc_privCheck ()
+function KTFCU_fnc_privCheck
 {
+	clear;
+	Write-Host "`n";
+
+	<# Check user's security level and return true/false. #>
+	$isElevated = $false;
+
 	$userObject = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent());
 	<# User is using the session as administrator #>
 	if ($userObject.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 		if (!$host.UI.RawUI.WindowTitle.StartsWith("Administrator: ")) {
 			$host.UI.RawUI.WindowTitle = "Administrator: " + $host.UI.RawUI.WindowTitle;
 		};
-		write-host "PS-Suite: PowerShell is currently running as Administrator!`n";
-		write-host "";
 
-		write-host "PS-Suite: Checking remote management settings. Please wait...`n";
+		Write-Host "KTFCU BetaBox: Establishing remote management settings. Please wait...`n";
 		Enable-PSRemoting -force
-		Set-StrictMode -Version 2
-		write-host "";
+		Write-Host "`n";
+
+		$majorVersion = $PSVersionTable.PSVersion.Major;
+		Write-Host "KTFCU BetaBox: Establishing strict mode version $majorVersion for shell. Please wait..."
+		Set-StrictMode -Version $majorVersion;
+		Write-Host "";
 
 		sleep 3;
 
-		return "true"
+		$isElevated = $true;
 	};
 	<# User is not using the session as administrator #>
 	if (($userObject.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) -ne "Administrator") {
-		write-host "PS-Suite: PowerShell is not running as Administrator!`n";
-		write-host "PS-Suite: Functionality will be limited!`n";
-		write-host "";
+		Write-Host "KTFCU BetaBox: PowerShell is not running as Administrator!`n" -foreground "Yellow";
+		Write-Host "KTFCU BetaBox: Functionality will be limited!`n";
+		Write-Host "";
 
-		write-host "PS-Suite: Checking remote management settings. Please wait...`n";
+		Write-Host "KTFCU BetaBox: Establishing remote management settings. Please wait...`n";
 		Enable-PSRemoting -force
-		Set-StrictMode -Version 2
+		Write-Host "`n";
+
+		$majorVersion = $PSVersionTable.PSVersion.Major;
+		Write-Host "KTFCU BetaBox: Establishing strict mode version $majorVersion for shell. Please wait..."
+		Set-StrictMode -Version $majorVersion;
+		Write-Host "";
 
 		sleep 3;
 
-		return "false"
+		$isElevated = $false;
 	};
+	return $isElevated
 };
 
-function KTFCU_fnc_setPath ()
+function KTFCU_fnc_setPath
 {
 	$newPath = $null
 	if ([IntPtr]::size * 8 -eq 64) {
-		$host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Windows PowerShell (x64)";
+		$host.UI.RawUI.WindowTitle = "KTFCU BetaBox | Different...On Purpose! (x64)";
 		$newPath = "${env:programfiles(x86)}\Utilities";
 	} else {
-		$host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Windows PowerShell (x86)";
+		$host.UI.RawUI.WindowTitle = "KTFCU BetaBox | Different...On Purpose! (x86)";
 		$newPath = "${env:programfiles}\Utilities";
 	};
 	if ((Test-Path $newPath) -and !($env:path -match $newPath.Replace("\","\\")) ) {
@@ -91,7 +104,7 @@ function KTFCU_fnc_setPath ()
 
 function KTFCU_fnc_ipRange
 {
-	write-host "For a range of targets use the format xxx.xxx.xxx.xxx-xxx`n";
+	Write-Host "For a range of targets use the format xxx.xxx.xxx.xxx-xxx`n";
     $ipPrompt = read-host "Enter the range of IPs to use";
 
     $octSplit = $ipPrompt.Split(".");
@@ -105,7 +118,7 @@ function KTFCU_fnc_ipRange
     return $ipRange
 };
 
-function KTFCU_fnc_adComputers
+function KTFCU_fnc_findTargets
 {
 	param (
 		[Parameter(Mandatory=$true)][array]$type
@@ -126,12 +139,12 @@ function KTFCU_fnc_adComputers
 		};
 		return $pcs
 	};
-	if ($type -eq 'locA') {
-		return $KTFCU_locationA
+	if ($type -eq 'sat') {
+		return $KTFCU_satellites
 	};
 };
 
-function KTFCU_fnc_hostFind ()
+function KTFCU_fnc_hostFind
 {
 	&KTFCU_fnc_header;
 
@@ -140,31 +153,31 @@ function KTFCU_fnc_hostFind ()
 	$targetHost = "";
 
 	$msgPrompt = "`n";
-	$locPrompt = "Please select the target(s) to include";
+	$locPrompt = "KTFCU BetaBox: Please select the target(s) to include";
 
 	$locOption = new-object collections.objectmodel.collection[management.automation.host.choicedescription];
 
-	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Alpha Site"));
+	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "S&atellites"));
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Workstations"));
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Servers"));
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "&Range of IPs"));
 	$locOption.add((new-object management.automation.host.choicedescription -argumentlist "Single &IP"));
 
 	$ktfcu_locSelect = $host.ui.promptforchoice($locPrompt, $msgPrompt, $locOption, 4);
-	write-host "`n";
+	Write-Host "`n";
 
 	switch ($ktfcu_locSelect) {
-		0 {$testHosts = &KTFCU_fnc_adComputers -type 'locA'};
-		1 {$testHosts = &KTFCU_fnc_adComputers -type 'pcs'};
-		2 {$testHosts = &KTFCU_fnc_adComputers -type 'servers'};
+		0 {$testHosts = &KTFCU_fnc_findTargets -type 'sat'};
+		1 {$testHosts = &KTFCU_fnc_findTargets -type 'pcs'};
+		2 {$testHosts = &KTFCU_fnc_findTargets -type 'servers'};
 		3 {$testHosts = &KTFCU_fnc_ipRange;};
 		4 {
-			$targetHost = read-host -prompt "Please enter the IP address of the host machine";
+			$targetHost = read-host -prompt "Please enter the IP address of the target machine";
 			$testHosts = [string]$targetHost;
 		};
 	};
 
-	write-host "Attempting to contact the selected machines. Please wait...`n"
+	Write-Host "Attempting to contact the selected machines. Please wait...`n"
 
 	forEach ($i in $testHosts)
 	{
@@ -172,111 +185,157 @@ function KTFCU_fnc_hostFind ()
 			$checkState = test-connection $i -count 2 -quiet;
 			if ($checkState) {
 				$isAlive = [array]$isAlive += $i;
-				write-host "Host $i is Online!" -foreground "Green";
+				Write-Host "Host $i is Online!" -foreground "Green";
 			} else {
-				write-host "Host $i is Unreachable!" -foreground "Red";
+				Write-Host "Host $i is Unreachable!" -foreground "Red";
 			};
 		} else {
-			write-host "Host $i is blacklisted!" -foreground "Yellow";
+			Write-Host "Host $i is blacklisted!" -foreground "Yellow";
 		};
 	};
-	write-host "`n";
+	Write-Host "`n";
 	return $isAlive
 };
 
 function KTFCU_fnc_header
 {
 	clear;
-	write-host "";
-	write-host "PS-Suite: Welcome to PS-Suite Alpha!";
-	write-host "PS-Suite: PS-Suite is currently in an alpha state.";
-	write-host "PS-Suite: Please report any issues on the git page.";
-	write-host "PS-Suite: For real time updates please subscribe!";
-	write-host "PS-Suite: https://github.com/mfry224/";
-	write-host "";
-	write-host "Disclaimer: This software is in an Alpha state and may cause harm to your systems and/or network if not used properly!`n            Always be mindful of what you are doing and look twice...smash your keyboard once ;)" -foreground "Yellow";
-	write-host "`n";
+	Write-Host "-----------------------------------------";
+	Write-Host "              KTFCU BetaBox              ";
+	Write-Host "         Different...On Purpose!         ";
+	Write-Host "   Please report issues on the git page  ";
+	Write-Host "       https://github.com/mfry224/       ";
+	Write-Host "-----------------------------------------";
+	Write-Host "`n";
+	Write-Host "Don't forget to set your variables in the top of this script!" -foreground "Yellow";
+	Write-Host "Be sure to test these tools before using in production!" -foreground "Yellow";
 };
+<#
 function KTFCU_fnc_menuMain
 {
 	&KTFCU_fnc_setPath;
 	&KTFCU_fnc_header;
 
-	write-host "  --  Main Menu  -- `n";
+	Write-Host "`n";
+	Write-Host "What would you like to do?";
+	Write-Host "`n";
 
-	switch (KTFCU_fnc_prompt -menuOpts @("Software Management","Admin Toolbox"))
+	Write-Host "-[1] Software Management";
+	Write-Host "-[2] Administrator Tools";
+	Write-Host "`n";
+
+	Write-Host "-[Q] Quit";
+	Write-Host "`n";
+
+	$input = read-host "Type your selection and press enter";
+	Write-Host "`n";
+
+	switch ($input)
 	{
-		0 {&KTFCU_fnc_softMenu;};
-		1 {&KTFCU_fnc_toolsMain;};
-		2 {
-			write-host "";
-			write-host "Thank you for using the PS-Suite for Windows Powershell!`n";
+		1
+		{
+			clear;
+			&KTFCU_fnc_softMenuMain;
+		};
+		2
+		{
+			clear;
+			&KTFCU_fnc_toolsMain;
+		};
+		'q'
+		{
+			clear;
+			Write-Host "";
+			Write-Host "Thank you for using the KTFCU BetaBox for Windows Powershell!`n";
 			sleep -s 3;
+			clear;
 		};
 	};
 };
-function KTFCU_fnc_softMenu ()
+ #>
+function KTFCU_fnc_menuMain
 {
-	<# User input from software manager menu will be used here #>
-	switch (KTFCU_fnc_progMenu) {
-		<# User chose to install software #>
-		0
-		{
-			switch (KTFCU_fnc_appMenu)
-			{
-				<# Add your software here if you want to deploy it to a large number of clients or even a single target for testing #>
-				'1'
-				{
-					forEach ($i in KTFCU_fnc_hostFind) {
-						write-host "Adobe Reader 11.0.10 will now be installed on $i!";
-						&Start-Process "\\server\path\to \software\program.exe" "/quiet /norestart /otherOptions";
-					};
-				};
-			};
+	&KTFCU_fnc_setPath;
+	&KTFCU_fnc_header;
+
+	Write-Host "`n";
+	Write-Host "What would you like to do?";
+	Write-Host "`n";
+
+	Write-Host "-[1] Software Management";
+	Write-Host "-[2] IP Management";
+	Write-Host "-[3] DNS Management";
+	Write-Host "-[4] Services Management";
+	Write-Host "-[5] Profile Management";
+	Write-Host "`n";
+
+	Write-Host "-[Q] Quit";
+	Write-Host "`n";
+
+	$option = read-host "Type your selection and press enter";
+	Write-Host "`n";
+
+	switch ($option)
+	{
+		1 { # Program Tools
+			clear;
+			&KTFCU_fnc_softMenuMain;
 		};
-		<# User chose to remove software #>
-		1
-		{
-			<# DO NOT USE THIS as win32_product is known to cause unintended behaviors #>
-			<# Prompt user to type name of software. Functions more like a search rather than specific name lookup #>
-			<# $ktfcu_appPrompt = read-host "Please enter the name of the software you want to remove";
-			forEach ($i in KTFCU_fnc_hostFind)
-			{
-				$ktfcu_isAlive = test-connection $i -count 2 -quiet;
-				if ($ktfcu_isAlive) {
+		2 { # IPv6 Tools
+			clear;
+			&KTFCU_fnc_ipvMenuMain;
+		};
+		3 { # DNS Tools
+			clear;
+			&KTFCU_fnc_dnsMenuMain;
+		};
+		4 { # Services Tools
+			clear;
+			&KTFCU_fnc_remoteMenuMain;
+		};
+		5 { # Profile Tools
+			clear;
+			&KTFCU_fnc_profileMenuMain;
+		};
+		'q' { # Quit Program
+			clear;
+			Write-Host "";
+			Write-Host "Thank you for using the KTFCU BetaBox for Windows Powershell!`n";
+			sleep -s 3;
+			clear;
+			break;
+		};
+	};
+};
 
-					$ktfcu_appFound = gwmi win32_product -computer $i -filter "Name LIKE '%$ktfcu_appPrompt%'";
-					if ($ktfcu_appFound) {
+function KTFCU_fnc_softMenuMain
+{
+	function KTFCU_fnc_softMenu
+	{
+		&KTFCU_fnc_header;
 
-						$ktfcu_appID = $ktfcu_appFound.IdentifyingNumber;
-						$ktfcu_appName = $ktfcu_appFound.Name;
-						$ktfcu_appVersion = $ktfcu_appFound.Version;
+		Write-Host "  --  Software Management  -- ";
+		Write-Host "`n";
 
-						$classKey="IdentifyingNumber=`"$ktfcu_appID`",Name=`"$ktfcu_appName`",version=`"$ktfcu_appVersion`"";
+		Write-Host "-[1] View Installed Programs";
+		Write-Host "-[2] More options coming soon!";
+		Write-Host "`n";
 
-						write-host "$ktfcu_appName has been found on $i!" -foreground "Green";
-						write-host "`n";
-						write-host "Application Name: $ktfcu_appName" -foreground "Green";
-						write-host "Application Version: $ktfcu_appVersion" -foreground "Green";
-						write-host "Application ID: $ktfcu_appID" -foreground "Green";
-						write-host "`n";
+		Write-Host "-[Q] Main Menu";
+		Write-Host "`n";
 
-						([wmi]"\\$i\root\cimv2:Win32_Product.$classKey").uninstall();
-					} else {
-						write-host "Warning: Application was not found on $i!" -foreground "Yellow";
-						write-host "`n";
-					}
-				} else {
-					write-host "Error: Host $i is Unreachable!" -foreground "Red";
-					write-host "`n";
-					write-host "`n";
-				}
-			} #>
-		}
-		<# User chose to view installed programs #>
-		2
-		{
-			$array = @();
+		$option = read-host "Type your selection and press enter";
+
+		return $option
+	};
+
+	switch (KTFCU_fnc_softMenu) {
+		1 {
+			<# List all installed software on target(s) #>
+			Write-Host "KTFCU BetaBox: Please wait while the list is being populated...";
+			Write-Host "`n";
+
+			$KTFCU_regArray = @();
 			forEach ($i in KTFCU_fnc_hostFind){
 
 				<# Define the variable to hold the location of Currently Installed Programs #>
@@ -299,574 +358,423 @@ function KTFCU_fnc_softMenu ()
 					$thisSubKey=$reg.OpenSubKey($thisKey);
 
 					$obj = New-Object PSObject
-					$obj | Add-Member -MemberType NoteProperty -Name "ComputerName" -Value $computername;
+					$obj | Add-Member -MemberType NoteProperty -Name "ComputerName" -Value $i;
 					$obj | Add-Member -MemberType NoteProperty -Name "DisplayName" -Value $($thisSubKey.GetValue("DisplayName"));
 					$obj | Add-Member -MemberType NoteProperty -Name "DisplayVersion" -Value $($thisSubKey.GetValue("DisplayVersion"));
 					$obj | Add-Member -MemberType NoteProperty -Name "InstallLocation" -Value $($thisSubKey.GetValue("InstallLocation"));
 					$obj | Add-Member -MemberType NoteProperty -Name "Publisher" -Value $($thisSubKey.GetValue("Publisher"));
 
-					$array += $obj;
+					$KTFCU_regArray += $obj;
 				};
-				$array | Where-Object { $_.DisplayName } | select ComputerName, DisplayName, DisplayVersion, Publisher | ft -auto
 			};
+			$KTFCU_regArray | Where-Object { $_.DisplayName } | select ComputerName, DisplayName, DisplayVersion, Publisher | ft -auto;
+			read-host "KTFCU BetaBox: Press enter to continue";
+			&KTFCU_fnc_menuMain;
+		};
+		'q' { # Main Menu
+			&KTFCU_fnc_menuMain;
 		};
 	};
 };
-function KTFCU_fnc_prompt {
-	param (
-		[Parameter(Mandatory=$true)][array]$menuOpts
-    );
 
-	$msgMsg = "";
-	$msgTitle = "";
+function KTFCU_fnc_ipvMenuMain
+{
+	function KTFCU_fnc_ipv6Switch
+	{
+		&KTFCU_fnc_header;
 
-	$userMenu = new-object collections.objectmodel.collection[management.automation.host.choicedescription];
+		Write-Host "  --  IPv6 Management  -- ";
+		Write-Host "`n";
 
-	<# Create a dynamically sized option selection for selected menu #>
-	forEach ($i in $menuOpts) {
-		$userMenu.add((new-object management.automation.host.choicedescription -argumentlist "`&$i"));
+		Write-Host "-[1] Enable IPv6 for target(s)";
+		Write-Host "-[2] Disable IPv6 for target(s)";
+		Write-Host "`n";
+
+		Write-Host "-[Q] Main Menu";
+		Write-Host "`n";
+
+		$option = read-host "Type your selection and press enter";
+
+		return $option
 	};
 
-	<# Quit is always an option regardless of menu #>
-	$userMenu.add((new-object management.automation.host.choicedescription -argumentlist "`&Quit"));
-
-	$userPrompt = $host.ui.promptforchoice($msgMsg,$msgTitle,$userMenu,($menuOpts).count);
-
-	return $userPrompt
-}
-function KTFCU_fnc_progMenu ()
-{
-	$host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Software Management Menu | Windows PowerShell (x64)";
-	&KTFCU_fnc_header;
-
-	write-host "  --  Software Management Menu  -- `n";
-	KTFCU_fnc_prompt -menuOpts @("Install","Uninstall","View Installed");
-}
-function KTFCU_fnc_appMenu
-{
-	$host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Software Installation Menu | Windows PowerShell (x64)";
-	&KTFCU_fnc_header;
-
-	write-host "Note: This menu will be more dynamic in future updates and currently must be configured for specific packages!`n" -foreground "Yellow";
-
-	write-host "  --  Software Installation Menu  -- `n";
-
-	write-host "Selections:";
-	write-host "-[1] Adobe Reader 11.0.10";
-	write-host "";
-	write-host "-[Q] Main Menu`n";
-
-	$option = read-host "Type your selection and press enter";
-
-	return $option;
-}
-function KTFCU_fnc_toolsMain
-{
-	<# Wait for input and execute appropriate menu #>
-	switch (KTFCU_fnc_toolsMenu) {
-		0 {
-			switch (KTFCU_fnc_netshMenu) {
-				'1'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet;
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-
-							write-host "Enabling Teredo settings for host $i`n";
-							Invoke-Expression "netsh int teredo set state default";
-
-							write-host "Enabling 6to4 settings for host $i`n";
-							Invoke-Expression "netsh int 6to4 set state default";
-
-							write-host "Enabling ISATAP settings for host $i`n";
-							Invoke-Expression "netsh int isatap set state default";
-
-						}
-					}
-				}
-				'2'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet;
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-
-							write-host "Disabling Teredo settings for host $i`n";
-							Invoke-Expression "netsh int teredo set state disabled";
-
-							write-host "Disabling 6to4 settings for host $i`n";
-							Invoke-Expression "netsh int 6to4 set state disabled";
-
-							write-host "Disabling ISATAP settings for host $i`n";
-							Invoke-Expression "netsh int isatap set state disabled";
-						}
-					}
-				}
-			}
-			read-host "Press any key to return to the main menu";
-		}
+	switch (KTFCU_fnc_ipv6Switch)
+	{
 		1 {
-			switch (ktfcu_fnc_dnsMenu) {
-				'1'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet;
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Now registering DNS for host $i`n"
-							Invoke-Expression "ipconfig /registerdns"
-						}
-					}
-				}
-				'2'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet;
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Now flushing DNS for host $i`n"
-							Invoke-Expression "ipconfig /flushdns"
-						}
-					}
-				}
-				'3'
-				{
-					&KTFCU_fnc_header;
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				Write-Host "Enabling Teredo settings for host $i`n";
+				Invoke-Expression "netsh int teredo set state default";
 
-					write-host "PS-Suite: Please wait while your DNS records are being parsed.`n";
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						write-host "PS-Suite: Now processing DNS records for IP $i!`n";
+				Write-Host "Enabling 6to4 settings for host $i`n";
+				Invoke-Expression "netsh int 6to4 set state default";
 
-						$dnsRecord = Get-DnsServerResourceRecord -ZoneName $KTFCU_domainLocal -ComputerName $KTFCU_dcname -RRType "A" | select HostName,@{Name='RecordData';Expression={$_.RecordData.IPv4Address.ToString()}} | Where {$_.RecordData -match $i};
-						<# $dnsHost = Get-DnsServerResourceRecord -ZoneName $KTFCU_domainLocal -ComputerName $KTFCU_dcname -RRType "A" | select HostName,@{Name='RecordData';Expression={$_.RecordData.IPv4Address.ToString()}} | Where {$_.RecordData -match $i}; #>
-
-						if (($dnsRecord.RecordData).count -gt 1 -and ($dnsRecord.HostName -ne "@") -and ($dnsRecord.HostName -eq "TAG")) {
-							forEach ($i in $dnsRecord.HostName)
-							{
-								write-host "PS-Suite: Duplicate DNS A records found for host $i!" -foreground 'Yellow';
-								write-host "PS-Suite: DNS entries for host(s)"$dnsRecord.HostName"will now be removed!";
-								write-host "PS-Suite: New dynamic DNS entries will be created automatically unless you only use static DNS entries.`n";
-
-								write-host "PS-Suite: Now removing DNS record for host $i!" -foreground 'Yellow';
-
-								Remove-DnsServerResourceRecord -ZoneName $KTFCU_domainLocal -ComputerName $KTFCU_dcname -RRType "A" -Name $i;
-
-								Invoke-Expression "ipconfig /flushdns";
-								Invoke-Expression "ipconfig /registerdns";
-								Write-Host "`n";
-							};
-						} ElseIf (($dnsRecord.RecordData).count -lt 2) {
-							write-host "PS-Suite: There are no duplicate DNS A records detected on $KTFCU_dcname@$KTFCU_domainLocal for $i`n" -foreground "Green";
-						};
-					};
-				};
+				Write-Host "Enabling ISATAP settings for host $i`n";
+				Invoke-Expression "netsh int isatap set state default";
 			};
-			read-host "Press any key to return to the main menu";
 		};
 		2 {
-			switch (ktfcu_fnc_gpoMenu) {
-				'1'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Updating Group Policy for host $i`n"
-							Invoke-Expression "gpupdate /force"
-						}
-					}
-				}
-				'2'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Updating Group Policy for host $i`n"
-							Invoke-Expression "gpupdate /boot"
-						}
-					}
-				}
-				'3'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Updating Group Policy for host $i`n"
-							Invoke-Expression "gpupdate /force /boot"
-						}
-					}
-				}
-			}
-		}
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				Write-Host "Disabling Teredo settings for host $i`n";
+				Invoke-Expression "netsh int teredo set state disabled";
+
+				Write-Host "Disabling 6to4 settings for host $i`n";
+				Invoke-Expression "netsh int 6to4 set state disabled";
+
+				Write-Host "Disabling ISATAP settings for host $i`n";
+				Invoke-Expression "netsh int isatap set state disabled";
+			};
+		};
+		'q' { # Main Menu
+			&KTFCU_fnc_menuMain;
+		};
+	};
+	read-host "KTFCU BetaBox: Press enter to continue";
+	&KTFCU_fnc_menuMain;
+};
+
+function KTFCU_fnc_dnsMenuMain
+{
+	function ktfcu_fnc_dnsMenu
+	{
+		&KTFCU_fnc_header;
+
+		Write-Host "  --  DNS Management  -- ";
+		Write-Host "`n";
+
+		Write-Host "-[1] Flush Client DNS Entries";
+		Write-Host "-[2] Register Client DNS";
+		Write-Host "-[3] DNS Record Maintenance";
+		Write-Host "`n";
+
+		Write-Host "-[Q] Main Menu";
+		Write-Host "`n";
+
+		$option = read-host "Type your selection and press enter";
+
+		return $option
+	};
+
+	switch (ktfcu_fnc_dnsMenu) {
+		1 {
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				Write-Host "Now flushing DNS for host $i`n";
+				Invoke-Expression "ipconfig /flushdns";
+			};
+		};
+		2 {
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				Write-Host "Now registering DNS for host $i`n";
+				Invoke-Expression "ipconfig /registerdns";
+			};
+		};
 		3 {
-			&ktfcu_fnc_remreg_menu
-			write-host "`n"
+			if ($KTFCU_myDCs.count -gt 1) {
+				Write-Host "`n";
+				Write-Host "KTFCU BetaBox: Support for multiple Domain Controllers is still being developed.";
+				Write-Host "KTFCU BetaBox: Please use only one DC for now.";
+				Write-Host "`n";
+			} else {
+				$KTFCU_dcname = $KTFCU_myDCs[0];
+			};
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				$dnsRecordA = Get-DnsServerResourceRecord -ZoneName $KTFCU_domName -ComputerName $KTFCU_dcname -RRType "A" | select HostName,@{Name='RecordData';Expression={$_.RecordData.IPv4Address.ToString()}} | Where {$_.RecordData -match $i};
+				$dnsRecordAAAA = Get-DnsServerResourceRecord -ZoneName $KTFCU_domName -ComputerName $KTFCU_dcname -RRType "AAAA" | select HostName,@{Name='RecordData';Expression={$_.RecordData.IPv6Address.ToString()}} | Where {$_.RecordData -match $i};
 
-			$input_remreg = read-host "Please select an option"
-			write-host "`n"
+				$aRecordIPs = $dnsRecordA.RecordData;
+				$aRecordNames = $dnsRecordA.HostName;
 
-			switch ($input_remreg) {
-				'1'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Enabling remote registry service for host $i`n"
-							(Get-WmiObject -computer $i Win32_Service -Filter "Name='RemoteRegistry'").InvokeMethod("StartService",$null)
-						}
-					}
-				}
-				'2'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Disabling remote registry service for host $i`n"
-							(Get-WmiObject -computer $i Win32_Service -Filter "Name='RemoteRegistry'").InvokeMethod("StopService",$null)
-						}
-					}
-				}
-				'3'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Enabling WinRM registry service for host $i`n"
-							(Get-WmiObject -computer $i Win32_Service -Filter "Name='WinRM'").InvokeMethod("StartService",$null)
-						}
-					}
-				}
-				'4'
-				{
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet
-						if ($ktfcu_isAlive) {
-							&KTFCU_fnc_header;
-							write-host "Disabling WinRM registry service for host $i`n"
-							(Get-WmiObject -computer $i Win32_Service -Filter "Name='WinRM'").InvokeMethod("StopService",$null)
-						}
-					}
-				}
-			}
-		}
-		4 {
-			switch (KTFCU_fnc_sysInfo) {
-				0 {
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$ktfcu_isAlive = test-connection $i -count 2 -quiet
-						if ($ktfcu_isAlive) {
-							write-host "Compiling system info for host $i`n"
-							$compname = [System.Net.dns]::GetHostbyAddress($i).hostname
-							$computer = get-wmiobject Win32_OperatingSystem -ComputerName $compname
-							$InstalledDate = $computer.ConvertToDateTime($computer.Installdate)
-							$OutputObj  = New-Object -Type PSObject
-							$OutputObj | Add-Member -MemberType NoteProperty -Name "Computer Name" -Value $compname
-							$OutputObj | Add-Member -MemberType NoteProperty -Name "IP Address" -Value $i
-							$OutputObj | Add-Member -MemberType NoteProperty -Name "Installed Date" -Value $InstalledDate.toShortDateString()
+				if (($dnsRecordA.RecordData).count -gt 1) {
 
-							$userName = [Environment]::GetFolderPath("MyDocuments");
-							$logPath = ($userName + '\logs');
+					forEach ($aRecordIP in $aRecordIPs)
+					{
+						if ($aRecordIP -eq $i) {
+							$aRecordNames = $dnsRecordA.HostName;
+							forEach ($aRecordName in $aRecordNames) {
+								Write-Host "KTFCU BetaBox: Duplicate DNS A records found for IP $aRecordIP";
+								Write-Host "`n";
+								Write-Host "KTFCU BetaBox: Host will recreate the A Record entry if not using static records`n";
 
-							if (!(test-path $logPath)) {
-								new-item -path $logPath -ItemType directory -force;
+								Remove-DnsServerResourceRecord -ZoneName $KTFCU_domName -ComputerName $KTFCU_dcname -RRType "A" -Name $aRecordName -confirm:$true -ErrorAction Stop;
 							};
-							$OutputObj | export-csv -path ($logPath + "systemInfo.csv") -append
-
-							$OutputObj | FL
-							write-host "`n"
-						}
-					}
-					Read-Host -Prompt "Press Enter to continue"
-				}
-				1 {
-					write-host "PS-Suite: This tool will remove ALL profiles that are not protected!" -foreground "Red";
-					write-host "PS-Suite: Press Ctrl+V repeatadly if you need to cancel this operation!" -foreground "Yellow";
-					write-host "`n";
-					forEach ($i in KTFCU_fnc_hostFind)
-					{
-						$strName = Get-WmiObject win32_computersystem -Computer $i | Select -expand username;
-
-						<# Let's check to see if the get object returns a username by counting the string characters to exlcude logged in users from being deleted #>
-						if ($strName.length -gt 0) {
-
-							$domainInt = ([Environment]::UserDomainName).length;
-							<# The + 1 ensures we cut off the \ after the domain name leaving only the username #>
-							$localName = ($strName).Remove(0,(1 + $domainInt));
-							$domainName = $localName + '.' + ([Environment]::UserDomainName);
-
-							[string]$curUser = gwmi -ComputerName $i Win32_UserProfile | Select @{Name='localpath';Expression={$_.localpath.ToString()}} | Where {$_.localpath -match $localName}
-							#read-host "$curUser"
-							$midUser = ($curUser).Remove(0,21);
-							#read-host "$midUser"
-							[Int]$lengthUser = ($midUser).length;
-							#read-host "$lengthUser"
-							$finalUser = ($midUser).Remove(($lengthUser - 1),1);
-							#read-host "$finalUser"
-
-							$name = Get-Random -minimum 1 -maximum 9999;
-							$folders = Get-ChildItem -Path "\\$i\C$\Users\" -Exclude admin*,public*,default*,'All Users',$finalUser;
-
-							write-host "PS-Suite: Logged on user detected!`n";
-							write-host "PS-Suite: $finalUser has been excluded from folder deletion for host $i`n";
-
-							$Profiles = Get-WmiObject -Class Win32_UserProfile -Computer $i -ea 0;
-
-							<# Clean out all users accounts by SID #>
-							foreach ($profile in $profiles) {
-								$objSID = New-Object System.Security.Principal.SecurityIdentifier($profile.sid);
-								$objuser = $objsid.Translate([System.Security.Principal.NTAccount]);
-								$profilename = $objuser.value.split("\")[1];
-								if ($protAccts -contains $profilename) {
-									Write-Host "$profilename is protected!`n" -foreground "Yellow";
-								} else {
-									$profile.delete();
-									Write-Host "$profilename deleted successfully on $i`n";
-								};
-							};
-
-							<# If the folder path\length is too long let's rename it to then be deleted without error while excluding loggred in user #>
-							foreach ($folder in $folders){
-
-								$subFolders = Get-ChildItem -Path $folder"\*" -Exclude $folder;
-								foreach ($subFolder in $subFolders){
-									Rename-Item -Verbose -Path $subFolder.FullName -NewName "$name";
-
-									if ($subFolder.PSIsContainer){
-										$parts = $subFolder.FullName.Split("\")
-										$folderPath = $parts[0];
-										for ($x = 1; $x -lt $parts.Count - 1; $x++){
-											$folderPath = $folderPath + "\" + $parts[$x];
-										}
-										$folderPath = $folderPath + "\$name";
-									};
-									$name++;
-								};
-								Remove-Item -Force -Verbose -Recurse -Path $folder;
-								write-host "`n";
-							};
-						} else {
-
-							<# The username string was less than 0 or null meaning there is no logged in user so let's delete all profiles that should not be there #>
-							$name = Get-Random -minimum 1 -maximum 9999;
-							$folders = Get-ChildItem -Path "\\$i\C$\Users\" -Exclude admin*,public*,default*,'All Users';
-
-							write-host "PS-Suite: No logged on users detected!`n";
-							
-							$Profiles = Get-WmiObject -Class Win32_UserProfile -Computer $i -ea 0;
-
-							<# Clean out all users accounts by SID #>
-							foreach ($profile in $profiles) {
-								$objSID = New-Object System.Security.Principal.SecurityIdentifier($profile.sid);
-								$objuser = $objsid.Translate([System.Security.Principal.NTAccount]);
-								$profilename = $objuser.value.split("\")[1];
-								if ($protAccts -contains $profilename) {
-									Write-Host "$profilename is protected!`n" -foreground "Yellow";
-								} else {
-									$profile.delete();
-									Write-Host "$profilename deleted successfully on $i`n";
-								};
-							};
-							
-							<# We will clean out the user folders that have no corresponding profile SID #>
-							foreach ($folder in $folders){
-
-								$subFolders = Get-ChildItem -Path $folder"\*" -Exclude $folder;
-								foreach ($subFolder in $subFolders){
-									Rename-Item -Verbose -Path $subFolder.FullName -NewName "$name";
-
-									if ($subFolder.PSIsContainer){
-										$parts = $subFolder.FullName.Split("\")
-										$folderPath = $parts[0];
-										for ($x = 1; $x -lt $parts.Count - 1; $x++){
-											$folderPath = $folderPath + "\" + $parts[$x];
-										}
-										$folderPath = $folderPath + "\$name";
-									};
-									$name++;
-								};
-								Remove-Item -Force -Verbose -Recurse -Path $folder;
-								write-host "`n";
-							};
+							Invoke-Expression "ipconfig /flushdns";
+							Invoke-Expression "ipconfig /registerdns";
+							Write-Host "`n";
 						};
-						write-host "`n";
-						read-host "PS-Suite: user folder deletion is complete. Please press any key to return to the main menu";
 					};
-				}
-				2 {
-					$filePrompt = read-host "Enter all filenames seperated by commas";
-                    $pathPrompt = read-host "Enter all paths seperated by commas";
+				} ElseIf (($dnsRecordAAAA.RecordData).count -gt 1 -or ($dnsRecordAAAA.HostName).count -gt 1) {
 
-					forEach ($i in KTFCU_fnc_hostFind)
+					forEach ($i in $dnsRecordAAAA.RecordData)
 					{
-						function KTFCU_fnc_fileManagement {
-							param (
-								[Parameter(Mandatory=$true)][array]$fileOpts,
-                                [Parameter(Mandatory=$true)][array]$pathOpts
-							);
+						Write-Host "KTFCU BetaBox: Duplicate DNS AAAA records found for"$dnsRecordAAAA.HostName;
+						Write-Host "`n";
+						Write-Host "KTFCU BetaBox: Host will recreate AAAA Record entry if not using static records`n";
 
-                            $userFiles = @();
-                            $findPaths = @();
+						Remove-DnsServerResourceRecord -ZoneName $KTFCU_domName -ComputerName $KTFCU_dcname -RRType "AAAA" -Name $i -confirm:$true;
 
-						    $fileParts = $filePrompt.Split(",");
-                            $pathParts = $pathPrompt.Split(",");
-
-						    for ($x = 0; $x -lt $fileParts.Count; $x++){
-							    $userFiles = $userFiles += $fileParts[$x];
-						    };
-                            for ($x = 0; $x -lt $pathParts.Count; $x++){
-							    $findPaths = $findPaths += "\\$i\C$\"+$pathParts[$x];
-						    };
-
-							$delArrays = @();
-
-                            if (($findPaths).count -lt 2) {
-								forEach ($userFile in $userFiles) {
-									$findFiles = Get-ChildItem -Path $findPaths -verbose | Where {$_.Name -match $userFiles};
-									remove-item -whatif -path $findPaths"\"$userFiles -verbose;
-								};
-                            } else {
-							    forEach ($findPath in $findPaths) {
-								    forEach ($userFile in $userFiles) {
-									    $findFiles = Get-ChildItem -Path $findPath -verbose | Where {$_.Name -match $userFile}
-									    write-host "`n";
-									    $delArrays = $delArrays += $findFiles;
-                                        write-host "`n";
-								    };
-								    forEach ($delArray in $delArrays) {
-									    remove-item -whatif -path $findPath"\"$delArray -verbose <# -ErrorAction SilentlyContinue #>;
-								    };
-							    };
-                            };
-						};
-						&KTFCU_fnc_fileManagement -pathOpts $pathPrompt -fileOpts $filePrompt;
+						Invoke-Expression "ipconfig /flushdns";
+						Invoke-Expression "ipconfig /registerdns";
+						Write-Host "`n";
 					};
-					read-host "Pausing";
+				} else {
+					Write-Host "KTFCU BetaBox: There are no duplicate DNS records detected on $KTFCU_dcname@$KTFCU_domName for"$dnsRecordA.HostName;
+					Write-Host "`n";
 				};
 			};
 		};
+		'q' { # Main Menu
+			&KTFCU_fnc_menuMain;
+		};
 	};
+	read-host "Press any key to return to the main menu";
+	&KTFCU_fnc_menuMain;
 };
-function KTFCU_fnc_toolsMenu
+
+function KTFCU_fnc_remoteMenuMain
 {
-	$host.UI.RawUI.WindowTitle = "PS-Suite Alpha | Toolbox Menu | Windows PowerShell (x64)"
-	&KTFCU_fnc_header;
+	function KTFCU_fnc_remoteMenu
+	{
+		&KTFCU_fnc_header;
 
-	write-host "  --  Toolbox Menu  -- `n"
-	KTFCU_fnc_prompt -menuOpts @("Network","DNS","Group Policies","Registry","Systems")
-}
-function KTFCU_fnc_netshMenu
+		Write-Host "  --  Services Management  -- ";
+		Write-Host "`n";
+
+		Write-Host "-[1] Enable Remote Registry";
+		Write-Host "-[2] Disable Remote Registry";
+		Write-Host "-[3] Enable WinRM Service";
+		Write-Host "-[4] Disable WinRM Service";
+		Write-Host "`n";
+
+		Write-Host "-[Q] Main Menu";
+		Write-Host "`n";
+
+		$option = read-host "Type your selection and press enter";
+
+		return $option
+	};
+
+	switch (KTFCU_fnc_remoteMenu) {
+		1 {
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				Write-Host "Enabling remote registry service for target $i`n";
+				(Get-WmiObject -computer $i Win32_Service -Filter "Name='RemoteRegistry'").InvokeMethod("StartService",$null);
+			};
+		};
+		2 {
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				Write-Host "Disabling remote registry service for target $i`n";
+				(Get-WmiObject -computer $i Win32_Service -Filter "Name='RemoteRegistry'").InvokeMethod("StopService",$null);
+			};
+		};
+		3 {
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				Write-Host "Enabling WinRM service for target $i`n";
+				(Get-WmiObject -computer $i Win32_Service -Filter "Name='WinRM'").InvokeMethod("StartService",$null);
+			};
+		};
+		4 {
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				Write-Host "Disabling WinRM service for target $i`n";
+				(Get-WmiObject -computer $i Win32_Service -Filter "Name='WinRM'").InvokeMethod("StopService",$null);
+			};
+		};
+		'q' { # Main Menu
+			&KTFCU_fnc_menuMain;
+		};
+	};
+	read-host "Press any key to return to the main menu";
+	&KTFCU_fnc_menuMain;
+};
+
+function KTFCU_fnc_profileMenuMain
 {
-	&KTFCU_fnc_header
+	function KTFCU_fnc_profileMenu
+	{
+		&KTFCU_fnc_header;
 
-	write-host "  --  NETSH Tools Menu  -- `n"
+		Write-Host "  --  Profile Management  -- ";
+		Write-Host "`n";
 
-	write-host "Selections:";
-	write-host "-[1] Enable IPv6"
-	write-host "-[2] Disable IPv6"
-	write-host ""
-	write-host "-[Q] Main Menu`n"
+		Write-Host "-[1] Remove Profiles";
+		Write-Host "-[2] More features coming soon!";
+		Write-Host "`n";
 
-	$option = read-host "Type your selection and press enter"
+		Write-Host "-[Q] Main Menu";
+		Write-Host "`n";
 
-	return $option
-}
-function KTFCU_fnc_dnsMenu
-{
-	&KTFCU_fnc_header
+		$option = read-host "Type your selection and press enter";
 
-	write-host "  --  DNS Tools Menu  -- `n"
+		return $option
+	};
 
-	write-host "Selections:";
-	write-host "-[1] Register DNS"
-	write-host "-[2] Flush DNS"
-	write-host "-[3] DNS Zone Lookup"
-	write-host ""
-	write-host "-[Q] Main Menu`n"
+	$dedHosts = @();
 
-	$option = read-host "Type your selection and press enter"
+	<# These accounts MUST be protected from deletion or risk making system unstable! #>
+	<# TODO: Make corresponding var ToUpper for more precise matching. #>
+	$KTFCU_sysAccts = @("ADMINISTRATOR","NETWORK SERVICE","LOCAL SERVICE","SYSTEM");
 
-	return $option
-}
-function KTFCU_fnc_gpoMenu
-{
-	&KTFCU_fnc_header
+	<# Add any user names you want to be excluded from being removed. #>
+	$KTFCU_myAccts = @();
 
-	write-host "  --  Group Policy Tools Menu  -- `n"
+	switch (KTFCU_fnc_profileMenu) {
+		1 {
+			write-host "`n";
+			write-host "KTFCU BetaBox: Please enter any user names, seperated by a comma, to be excluded from profile deletion"
+			$KTFCU_addUser = read-host "KTFCU BetaBox: For example suzy,john,matt,ashley";
 
-	write-host "Selections:";
-	write-host "-[1] Update Group Policy with /force param"
-	write-host "-[2] Update Group Policy with /boot param"
-	write-host "-[3] Update Group Policy with /force /boot param"
-	write-host ""
-	write-host "-[Q] Main Menu`n"
+			$KTFCU_strUsers = $KTFCU_addUser.Split(",");
+			forEach ($KTFCU_strUser in $KTFCU_strUsers)
+			{
+				$cleanUser = $KTFCU_strUser.Trim();
+				$KTFCU_myAccts = $KTFCU_myAccts += $cleanUser;
+			};
 
-	$option = read-host "Type your selection and press enter"
+			forEach ($i in KTFCU_fnc_hostFind)
+			{
+				try {
 
-	return $option
-}
-function KTFCU_fnc_rmmMenu
-{
-	&KTFCU_fnc_header
+					Get-WmiObject win32_computersystem -Computer $i -ErrorAction Stop | Out-Null;
 
-	write-host "  --  Remote Management Tools Menu  -- `n"
+					$userName = [Environment]::GetFolderPath("MyDocuments");
+					$strName = Get-WmiObject win32_computersystem -Computer $i | Select -expand username;
 
-	write-host "Selections:";
-	write-host "-[1] Enable the remote registry"
-	write-host "-[2] Disable the remote registry"
-	write-host "-[3] Enable WinRM registry service"
-	write-host "-[4] Disable WinRM registry service"
-	write-host ""
-	write-host "-[Q] Main Menu`n"
+					<# If username string returns a length of more than 1 a user should be logged in otherwise we will remove all unprotected profiles. #>
+					if ($strName.length -gt 1) {
 
-	$option = read-host "Type your selection and press enter"
+						$localName = $strName.Split("\");
+						$userName = $localName[1].Trim();
+						$domainName = ([Environment]::UserDomainName);
+						$domainName = $userName + "." + $domainName;
+						
 
-	return $option;
-}
-function KTFCU_fnc_sysInfo
-{
-	&KTFCU_fnc_header
+						Write-Host "`n";
+						Write-Host "KTFCU BetaBox: User $userName has been detected on target $i and will not be removed!" -foreground "Yellow";
 
-	write-host "  --  System Info Tools Menu  -- `n"
-	KTFCU_fnc_prompt -menuOpts @("Installation Dates","Clean Roaming Profiles","File Management")
-}
+						$Profiles = Get-WmiObject -Class Win32_UserProfile -Computer $i;
+						forEach ($profile in $profiles) {
+							
+							$objSID = New-Object System.Security.Principal.SecurityIdentifier($profile.sid);
+							$objuser = $objsid.Translate([System.Security.Principal.NTAccount]);
+							$profilename = $objuser.value.split("\")[1];
 
-<# --------------------------------------------------------------------------------------------------------------- #>
-&KTFCU_fnc_header;
+							write-host "KTFCU BetaBox: Now processing user $profilename's profile...";
+							
+							<# Check if profile is in protected array or if profile is current user and skip those. #>
+							if (($KTFCU_sysAccts -contains $profilename) -or ($KTFCU_myAccts -contains $profilename) -or ($profilename -match $userName)) {
+								Write-Host "KTFCU BetaBox: $profilename is protected and will not be removed!" -foreground "Yellow";
+							} else {
+								$profile.delete();
+								Write-Host "KTFCU BetaBox: $profilename has been removed from target $i";
+							};
+						};
+
+						<# Rename all residual container objects to reduce path\file name length or risk triggering character limit exception #>
+						$name = Get-Random -minimum 1 -maximum 9999;
+						$folders = Get-ChildItem -Path "\\$i\C$\Users\" -Exclude Administrator,Administrator.$domainName,$userName,$domainName,Public,Default;
+
+						forEach ($folder in $folders){
+
+							if ($KTFCU_myAccts -notContains $folder) {
+								$subFolders = Get-ChildItem -Path $folder"\*" -Exclude $folder;
+								forEach ($subFolder in $subFolders){
+									Rename-Item -Verbose -Path $subFolder.FullName -NewName "$name";
+
+									if ($subFolder.PSIsContainer){
+										$parts = $subFolder.FullName.Split("\")
+										$folderPath = $parts[0];
+										for ($x = 1; $x -lt $parts.Count - 1; $x++){
+											$folderPath = $folderPath + "\" + $parts[$x];
+										};
+										$folderPath = $folderPath + "\$name";
+									};
+									$name++;
+								};
+								Remove-Item -Path $folder -Force -Verbose -Recurse;
+								Write-Host "`n";
+							} else {
+								write-host "KTFCU BetaBox: $folder is protected from deletion!" -foreground "Yellow";
+							};
+						};
+					} else {
+
+						$Profiles = Get-WmiObject -Class Win32_UserProfile -Computer $i;
+
+						<# Filter and remove all profiles that are NOT protected #>
+						forEach ($profile in $profiles) {
+
+							$objSID = New-Object System.Security.Principal.SecurityIdentifier($profile.sid);
+							$objuser = $objsid.Translate([System.Security.Principal.NTAccount]);
+							$profilename = $objuser.value.split("\")[1];
+
+							if (($KTFCU_sysAccts -contains $profilename) -or ($KTFCU_myAccts -contains $profilename)) {
+								Write-Host "KTFCU BetaBox: $profilename is protected!" -foreground "Yellow";
+							} else {
+								$profile.delete();
+								Write-Host "KTFCU BetaBox: $profilename deleted successfully from $i";
+							};
+						};
+
+						<# We will clean out the user folders that have no corresponding profile #>
+						$name = Get-Random -minimum 1 -maximum 9999;
+						$folders = Get-ChildItem -Path "\\$i\C$\Users\" -Exclude admin*,public*,default*,'All Users';
+
+						forEach ($folder in $folders){
+							$subFolders = Get-ChildItem -Path $folder"\*" -Exclude $folder;
+							forEach ($subFolder in $subFolders){
+								Rename-Item -Verbose -Path $subFolder.FullName -NewName "$name";
+
+								if ($subFolder.PSIsContainer){
+									$parts = $subFolder.FullName.Split("\")
+									$folderPath = $parts[0];
+									for ($x = 1; $x -lt $parts.Count - 1; $x++){
+										$folderPath = $folderPath + "\" + $parts[$x];
+									}
+									$folderPath = $folderPath + "\$name";
+								};
+								$name++;
+							};
+							Remove-Item -Path $folder -Force -Verbose -Recurse;
+							Write-Host "`n";
+						};
+					};
+				} catch [System.Runtime.InteropServices.COMException] {
+				
+					Write-Host "`nKTFCU BetaBox: Host at $i is not responding to RPC requests!" -foreground "Red";
+					$dedHosts = $dedHosts += $i;
+			
+				} finally {
+					
+				};
+			};
+			write-host "`nHosts that did not respond to RPC requests`n"
+			forEach ($dedHost in $dedHosts)
+			{
+				if ($dedHosts.count -lt 1) {
+					write-host "KTFCU BetaBox: There are no targets that did not respond the the RPC requests."
+				} else {
+					write-host "$dedHost";
+				};
+				
+			};
+		};
+		2 {
+			# Need view profiles here
+		};
+		'q' { # Main Menu
+			&KTFCU_fnc_menuMain;
+		};
+	};
+	read-host "Press any key to return to the main menu";
+	&KTFCU_fnc_menuMain;
+};
+
 &KTFCU_fnc_privCheck;
-$userName = [Environment]::GetFolderPath("MyDocuments");
-<# This will b needed for the more advanced version when requireing modules. #>
-<# $modPath = test-path $userName'\WindowsPowerShell\Modules\menuFunctions' -PathType Any;
-& {
-	if ($modPath) {
-		&import-module active*;
-		&import-module menuFunctions;
-	};
-	if (!$modPath) {
-		write-host "PS-Suite: ERROR! - Cannot find Menu Functions! Danger Will Robinson!" -foreground "Red";
-		write-host "PS-Suite: Please close this instance and place the menuFunctions.psm1 file in Documents\WindowsPowerShell\Modules folder.`n" -foreground "Yellow";
-		write-host "PS-Suite: In a future update PS-Suite will support all native PS module locations.`n" -foreground "Yellow";
-	};
-}; #>
-do {
-	KTFCU_fnc_menuMain
-}
-until (KTFCU_fnc_menuMain -eq 2);
+&KTFCU_fnc_menuMain;
