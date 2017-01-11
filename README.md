@@ -18,6 +18,7 @@ Tips:
 
 ## Change Log
 #### 1/11/2017
+- The Suite is now in Module format and requires installation as such. Create a folder in a PowerShell Module directory named Start-Toolbox and copy the script into this folder. Restart any open shell windows and use the command Import-Module Start-Toolbox to import the Module. 
 - Menu selection names have been changed to a more Windows friendly theme.
 - Domain Controller will be dynamically selected based on your domain's Primary DC.
 - Domain is now dynamically selected via PS engine function.
