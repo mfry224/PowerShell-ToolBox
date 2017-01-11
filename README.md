@@ -17,6 +17,18 @@ Tips:
 
 
 ## Change Log
+#### 1/11/2017
+- Menu selection names have been changed to a more Windows friendly theme.
+- Domain Controller will be dynamically selected based on your domain's Primary DC.
+- Domain is now dynamically selected via PS engine function.
+- A warning will be displayed if the Satellites (Specific targets) array is empty.
+- New Menu choice "Misc." has been added for odd jobs such as copy files/folders/etc. as well as deletion. More to come!
+- Output will now display the DNS name as well as the IP address of each machine that is touched per job.
+- Users can now exlcude specific names from profile removal jobs to avoid losing any profile data.
+- Admin profiles with .domain (Administrator.domain) will now be exculded as well as the local Admin (Administrator) account.
+- User accounts with a .domain (User.domain) will be excluded from profile removal jobs.
+- Profile folder objects are now properly renamed with a new method to avoid triggering the .net character limit.
+
 #### 10/11/2016
 - Profile cleaner is now more reliable by utilizing the win32_profile class to remove profiles via SID.
 - Residual profile folders are cleaned up with a second sweep after profiles are removed via SID.
