@@ -294,7 +294,7 @@ function Start-Toolbox
 				clear;
 				&KTFCU_fnc_reportMenuMain;
 			};
-			6 { # Misc.
+			7 { # Misc.
 				clear;
 				&KTFCU_fnc_miscMenuMain;
 			};
