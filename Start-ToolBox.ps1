@@ -709,7 +709,7 @@ function Start-Toolbox
 									};
 								};
 								
-								$folders = Get-ChildItem -Path "\\$target\C$\Users\" -Exclude Administrator,$domainAdmin,$userName,$profileName,$domainName,Public,Default,"All Users";
+								$folders = Get-ChildItem -Path "\\$i\C$\Users\" -Exclude Administrator,$domainAdmin,$userName,$profileName,$domainName,Public,Default,"All Users";
 
 								forEach ($folder in $folders){
 
@@ -777,7 +777,7 @@ function Start-Toolbox
 									};
 								};
 								
-								$folders = Get-ChildItem -Path "\\$target\C$\Users\" -Exclude Administrator,$domainAdmin,Public,Default,"All Users";
+								$folders = Get-ChildItem -Path "\\$i\C$\Users\" -Exclude Administrator,$domainAdmin,Public,Default,"All Users";
 
 								forEach ($folder in $folders){
 
