@@ -1,4 +1,4 @@
-# KTFCU-PS-SUITE
+# PowerShell ToolBox
 A collection of tools and functions to assist in everyday network administration.
 
 Required Software:
