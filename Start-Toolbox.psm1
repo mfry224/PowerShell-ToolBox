@@ -30,12 +30,13 @@ function Start-Toolbox
 	$KTFCU_domain = Get-ADDomain | Select-Object -Expand Forest;
 
 	<# Array of IPs to be omitted from any operations. #>
-	$KTFCU_blackList = @("132.52.10.10","132.52.10.11","132.52.10.12","132.52.10.112","132.52.10.102");
+	$KTFCU_blackList = @("0","0");
 	$KTFCU_sysAccts = @("NETWORK SERVICE","LOCAL SERVICE","SYSTEM");
 
 	<# Array of specific IPs to be used in host selection options. You may use this array to target a specific group of IPs.#>
 	$KTFCU_satellites = @(
-		
+		"",
+		"",
 	);
 
 	if (KTFCU_satellites.Count -eq 0) {
