@@ -35,8 +35,7 @@ function Start-Toolbox
 
 	<# Array of specific IPs to be used in host selection options. You may use this array to target a specific group of IPs.#>
 	$KTFCU_satellites = @(
-		"",
-		"",
+		
 	);
 
 	if (KTFCU_satellites.Count -eq 0) {
