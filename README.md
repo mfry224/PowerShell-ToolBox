@@ -18,6 +18,8 @@ Tips:
 
 ## Change Log
 #### 1/23/2017 Rolling
+- Reworked software removal has been added to the Programs and Features menu.
+- View Installed Programs has been cleaned up and empty entries are no longer populated in the list.
 - Added AD feature to check if AD User is a member of a group.
 - Added AD feature to check all groups an AD User is a member of.
 - Uniformed location to the user's Documents folder for all CSV reports generated from the reports menu.
