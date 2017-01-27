@@ -659,8 +659,8 @@ function Start-Toolbox
 
 								$domainUser = $strName.Split("\");
 								$userName = $domainUser[1].Trim();
-								$domainName = $userName + "." + $domain;
-								$domainAdmin = "Administrator." + $domain;
+								$domainName = $userName + "." + $KTFCU_domain;
+								$domainAdmin = "Administrator." + $KTFCU_domain;
 
 								Write-Debug "`n";
 								Write-Debug "Domain user`: $domainUser";
